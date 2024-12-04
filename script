@@ -1,0 +1,82 @@
+import re
+import csv
+from collections import Counter, defaultdict
+
+class LogAnalyzer:
+    def __init__(self, log_file, output_file, fail_threshold=10):
+        self.log_file = log_file
+        self.output_file = output_file
+        self.fail_threshold = fail_threshold
+        self.ip_requests = Counter()
+        self.endpoint_hits = Counter()
+        self.failed_logins = defaultdict(int)
+
+    def extract_data(self):
+        
+        pattern = re.compile(r'(?P<ip>\d+\.\d+\.\d+\.\d+).*?"(?P<method>\w+) (?P<endpoint>\S+).*?" (?P<status>\d+)')
+        with open(self.log_file, 'r') as file:
+            for line in file:
+                match = pattern.search(line)
+                if match:
+                    self._process_entry(match.groupdict())
+
+    def _process_entry(self, entry):
+       
+        ip = entry['ip']
+        endpoint = entry['endpoint']
+        status = entry['status']
+
+        self.ip_requests[ip] += 1
+        self.endpoint_hits[endpoint] += 1
+        if status == '401':  # Failed login attempt
+            self.failed_logins[ip] += 1
+
+    def analyze(self):
+       
+        sorted_ips = self.ip_requests.most_common()
+        top_endpoint = self.endpoint_hits.most_common(1)[0]
+        suspicious_ips = {ip: count for ip, count in self.failed_logins.items() if count > self.fail_threshold}
+        return sorted_ips, top_endpoint, suspicious_ips
+
+    def display_results(self, sorted_ips, top_endpoint, suspicious_ips):
+       
+        print("\n=== IP Requests Count ===")
+        print("IP Address           Request Count")
+        for ip, count in sorted_ips:
+            print(f"{ip:20} {count}")
+
+        print("\n=== Most Accessed Endpoint ===")
+        print(f"{top_endpoint[0]} (Accessed {top_endpoint[1]} times)")
+
+        print("\n=== Suspicious Activity Detected ===")
+        print("IP Address           Failed Login Attempts")
+        for ip, count in suspicious_ips.items():
+            print(f"{ip:20} {count}")
+
+    def save_results_to_csv(self, sorted_ips, top_endpoint, suspicious_ips):
+        
+        with open(self.output_file, 'w', newline='') as file:
+            writer = csv.writer(file)
+
+            writer.writerow(["IP Address", "Request Count"])
+            writer.writerows(sorted_ips)
+            writer.writerow([])
+
+            writer.writerow(["Most Accessed Endpoint", "Access Count"])
+            writer.writerow([top_endpoint[0], top_endpoint[1]])
+            writer.writerow([])
+
+            writer.writerow(["IP Address", "Failed Login Count"])
+            writer.writerows(suspicious_ips.items())
+
+    def run(self):
+        print("Analyzing log file...")
+        self.extract_data()
+        results = self.analyze()
+        self.display_results(*results)
+        self.save_results_to_csv(*results)
+        print(f"Results saved to {self.output_file}")
+
+if __name__ == "__main__":
+    analyzer = LogAnalyzer(log_file="sample.log", output_file="log_analysis_results.csv", fail_threshold=5)
+    analyzer.run()
